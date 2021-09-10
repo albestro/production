@@ -22,7 +22,7 @@ from reframe.core.exceptions import SanityError
 spacklib = util.import_module_from_file(os.path.join(os.path.dirname(__file__), 'src', 'spack_util', 'spacklib.py'))
 spackconfig = util.import_module_from_file(os.path.join(os.path.dirname(__file__), 'src', 'spack_util', 'spack_config.py'))
 
-SPACK_VERSIONS = ['develop', '0.15.4', '0.16.1']
+SPACK_VERSIONS = ['develop', '0.16.1']
 
 # TODO find a mechanism to include intel in the list
 base_cuda_compilers = ['gcc', 'cce']
@@ -79,24 +79,15 @@ class spack_config_check(rfm.RunOnlyRegressionTest):
         self.sanity_patterns = self.assert_config()
         self.sourcesdir = 'https://github.com/spack/spack.git'
 
-        self.legacy_spack = False
         if self.spack_version != 'develop':
             self.prerun_cmds = [
                 f'git checkout -b v{self.spack_version} v{self.spack_version}',
             ]
-            if spacklib.parse_version(self.spack_version) >= spacklib.parse_version('0.16.0'):
-                self.postrun_cmds += ['spack external find --scope site/cray']
-            elif spacklib.parse_version(self.spack_version) < spacklib.parse_version('0.15.0'):
-                raise ValueError(f'Sparck version {self.spack_version} is not supported')
-            else:
-                self.legacy_spack = True
-                self.postrun_cmds += [
-                    'spack external find',
-                ]
-        else:
-            self.postrun_cmds += ['spack external find --scope site/cray']
 
-        self.postrun_cmds += ['spack --version']
+        self.postrun_cmds = [
+            'spack external find --scope site/cray',
+            'spack --version'
+        ]
 
         self.all_cdt_compilers = {}
         self.all_compilers = {}
@@ -126,10 +117,6 @@ class spack_config_check(rfm.RunOnlyRegressionTest):
         self.config_file_path = os.path.join(spack_etc_dir, 'config.yaml')
         self.modules_file_path = os.path.join(spack_etc_dir, 'modules.yaml')
         # self.keep_files = [spack_etc_dir]
-
-        # This is a workaround for the lack of --scope in spack external find in 0.15.x versions
-        if self.legacy_spack:
-            self.variables['HOME'] = spack_etc_dir
 
     @deferrable
     def assert_config(self):
@@ -366,16 +353,8 @@ class spack_config_check(rfm.RunOnlyRegressionTest):
         }
 
         pkgs = spacklib.extract_all_spack_generated_packages(spack_packages)
-        if self.legacy_spack:
-            pkgs.update(spacklib.convert_packages_to_legacy(
-                self.generate_pe_dependent_package_entries(self.pe_dependent_pkgs)
-            ))
-            pkgs.update(spacklib.convert_packages_to_legacy(
-                self.generate_pe_independent_package_entries(self.pe_independent_pkgs)
-            ))
-        else:
-            pkgs.update(self.generate_pe_dependent_package_entries(self.pe_dependent_pkgs))
-            pkgs.update(self.generate_pe_independent_package_entries(self.pe_independent_pkgs))
+        pkgs.update(self.generate_pe_dependent_package_entries(self.pe_dependent_pkgs))
+        pkgs.update(self.generate_pe_independent_package_entries(self.pe_independent_pkgs))
 
         # the mentality is to add to the file, not remove from it
         # we are replacing some entries like the 'all' one and adding the
